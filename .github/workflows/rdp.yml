@@ -1,0 +1,57 @@
+name: Free RDP with Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    
+    steps:
+    - name: Enable RDP
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+        Write-Host "RDP Enabled"
+        
+    - name: Set Password
+      run: |
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force)
+        Write-Host "Password Set"
+        
+    - name: Install Tailscale
+      run: |
+        Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe" -OutFile "tailscale-setup.exe"
+        Start-Process -FilePath ".\tailscale-setup.exe" -ArgumentList "/quiet" -Wait
+        Write-Host "Tailscale Installed"
+        
+    - name: Connect Tailscale
+      run: |
+        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }} --hostname github-rdp-pc --accept-routes
+        Start-Sleep -Seconds 15
+        Write-Host "Tailscale Connected"
+        
+    - name: Get Tailscale IP and Details
+      run: |
+        $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+        Write-Host "============================================"
+        Write-Host "RDP CONNECTION DETAILS"
+        Write-Host "============================================"
+        Write-Host "IP ADDRESS: $ip"
+        Write-Host "USERNAME: runneradmin"
+        Write-Host "PASSWORD: P@ssw0rd123!"
+        Write-Host "============================================"
+        Write-Host "IMPORTANT: Install Tailscale app on your PC/Phone"
+        Write-Host "Login with same account, then RDP to the IP above"
+        Write-Host "============================================"
+        
+    - name: Keep Alive
+      run: |
+        Write-Host "Session Active - 6 hours"
+        while ($true) {
+          Start-Sleep -Seconds 300
+          $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          Write-Host "Active - IP: $ip - $(Get-Date -Format 'HH:mm:ss')"
+        }
